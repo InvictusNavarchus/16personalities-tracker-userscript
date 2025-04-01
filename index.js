@@ -334,10 +334,20 @@
             GM_log("Finished extracting trait data.", resultData.traits);
             return resultData;
         }
-
-        // Send results data on page load for the results page
-        window.addEventListener('load', () => {
-            GM_log('Results page loaded. Extracting and sending results...');
+        
+        // Function to check if the results content has loaded
+        function isResultsContentLoaded() {
+            // Check for key elements that indicate results have loaded
+            const titleElement = document.querySelector('h1.header__title');
+            const traitBoxes = document.querySelectorAll('div.sp-card--traits .traitbox');
+            
+            // Consider the page loaded when both the title and trait boxes are present
+            return titleElement && traitBoxes.length >= 5; // Should have 5 trait boxes
+        }
+        
+        // Function to handle the results data extraction and sending
+        function handleResultsData() {
+            GM_log('Results content detected. Extracting and sending results...');
             const resultData = extractResultData();
 
             // Basic check if extraction was successful before sending
@@ -365,7 +375,31 @@
             // Prevents trying to send results multiple times on refresh if send fails
             GM_deleteValue(SESSION_ID_KEY);
             GM_log("Result data send attempted. Cleared session ID from storage.");
-        });
+        }
+        
+        // Variables for polling
+        let checkAttempts = 0;
+        const MAX_ATTEMPTS = 60; // 30 seconds (checking every 500ms)
+        const POLLING_INTERVAL = 500; // Check every 500ms
+        
+        // Set up interval to periodically check for results content
+        const resultsCheckInterval = setInterval(() => {
+            checkAttempts++;
+            
+            if (isResultsContentLoaded()) {
+                // Content is loaded, clear interval and process data
+                clearInterval(resultsCheckInterval);
+                GM_log(`Results content detected after ${checkAttempts} attempts (${checkAttempts * POLLING_INTERVAL / 1000}s)`);
+                handleResultsData();
+            } else if (checkAttempts >= MAX_ATTEMPTS) {
+                // Timeout reached, give up
+                clearInterval(resultsCheckInterval);
+                GM_log(`Timed out waiting for results content after ${MAX_ATTEMPTS * POLLING_INTERVAL / 1000} seconds.`);
+            } else if (checkAttempts % 10 === 0) {
+                // Log progress periodically
+                GM_log(`Still waiting for results content... (${checkAttempts * POLLING_INTERVAL / 1000}s elapsed)`);
+            }
+        }, POLLING_INTERVAL);
     }
 
     // --- Router: Decide which logic to run based on URL --- // New section
