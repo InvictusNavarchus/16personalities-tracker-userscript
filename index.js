@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name           16Personalities Answer Tracker
 // @namespace      http://tampermonkey.net/
-// @version        0.3.0
+// @version        0.3.1
 // @description    Tracks 16Personalities test answers and sends them to a server using event delegation.
 // @author         Invictus (with integration assistance)
 // @match          https://www.16personalities.com/free-personality-test*
@@ -183,19 +183,15 @@
          if (isSeeResultsButton) {
              GM_log('Detected "See results" button click.');
 
-             // --- NEW: Prevent the default navigation immediately ---
-             event.preventDefault();
-             GM_log('Prevented default button action.');
-
-             // --- NEW: Send final answers using fetch and await it ---
+             // Send final answers using sendBeacon (fire and forget)
              if (answersPayload) {
-                 GM_log('Sending final answers payload (using fetch)...');
-                 await sendData(answersPayload, false); // Use fetch, wait for it to attempt sending
+                 GM_log('Sending final answers payload (using sendBeacon)...');
+                 sendData(answersPayload, true); // Use sendBeacon, no await
              } else {
                  GM_log('No final answers found on this page click.');
              }
 
-             // --- NEW: Send finish event using sendBeacon (fire and forget) ---
+             // Send finish event using sendBeacon (fire and forget)
              GM_log('Sending finish event payload (using sendBeacon)...');
              const finishPayload = {
                  type: 'event',
@@ -205,21 +201,6 @@
                  timestamp: new Date().toISOString(), // Generate a fresh timestamp for the event itself
              };
              sendData(finishPayload, true); // Use sendBeacon, do not await
-
-             // --- NEW: Manually trigger the form submission AFTER sending data ---
-             GM_log('Attempting to manually trigger form submission...');
-             const form = actionButton.closest('form');
-             if (form) {
-                 // Use timeout to allow sendBeacon a slightly better chance, though it's technically asynchronous
-                 setTimeout(() => {
-                     form.submit();
-                     GM_log('Form submitted manually.');
-                 }, 100); // Small delay might help but isn't strictly necessary for sendBeacon
-             } else {
-                 GM_log('Error: Could not find parent form to submit manually.');
-                 // If form submission fails, you might need to redirect manually if you know the URL
-                 // window.location.href = '...'; // Fallback if needed
-             }
 
          } else {
              // --- Original logic for "Next" button ---
