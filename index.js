@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         16Personalities Answer & Result Tracker
 // @namespace    http://tampermonkey.net/
-// @version      0.4.1
+// @version      0.4.2
 // @description  Tracks 16Personalities test answers and results, sending them to a server using event delegation.
 // @author       Invictus
 // @match        https://www.16personalities.com/free-personality-test*
@@ -270,9 +270,9 @@
              // For now, we stop if session ID is missing, as linking is desired.
              return;
         }
-
+ 
         GM_log(`Results Page Tracker Initialized. User ID: ${userId}, Session ID: ${sessionId} (retrieved)`); // New log
-
+ 
         // Function to extract results data from the page
         function extractResultData() {
             const resultData = {
@@ -288,8 +288,7 @@
                 }
             };
  
-            // --- Revised MBTI Result Extraction ---
-            // Try Format 1 selector first
+            // --- MBTI Result Extraction (Same as previous correction) ---
             const titleElementF1 = document.querySelector('h1.header__title');
             if (titleElementF1) {
                 resultData.mbtiResult = titleElementF1.textContent.trim();
@@ -299,9 +298,8 @@
                 }
                 GM_log("Extracted MBTI Result (Format 1)");
             } else {
-                // Try Format 2 selectors if Format 1 failed
-                const titleElementF2 = document.querySelector('.sp-typeheader .h1-phone, .sp-typeheader .h1-large-lgbp'); // Selectors for "Entertainer" part
-                const codeElementF2 = document.querySelector('.sp-typeheader .code h1');   // Selector for "ESFP-T" part
+                const titleElementF2 = document.querySelector('.sp-typeheader .h1-phone, .sp-typeheader .h1-large-lgbp');
+                const codeElementF2 = document.querySelector('.sp-typeheader .code h1');
                 if (titleElementF2 && codeElementF2) {
                     const titleName = titleElementF2.textContent.trim();
                     resultData.mbtiCode = codeElementF2.textContent.trim();
@@ -311,182 +309,184 @@
                     GM_log("Warning: Could not find MBTI result title/code elements using known formats.");
                 }
             }
-            // --- End Revised MBTI Result Extraction ---
+            // --- End MBTI Result Extraction ---
  
  
-            // --- Revised Trait Percentage Extraction ---
-            const traitContainer = document.querySelector('.sp-card--traits, .profile__traits--intl'); // Find the container for either format
+            // --- Revised and Corrected Trait Percentage Extraction ---
+            const traitContainer = document.querySelector('.sp-card--traits, .profile__traits--intl');
             if (!traitContainer) {
                  GM_log("Warning: Could not find trait container element (.sp-card--traits or .profile__traits--intl).");
-                 return resultData; // Return partially filled data or handle error
+                 return resultData;
             }
  
             const traitBoxes = traitContainer.querySelectorAll('.traitbox');
  
-            // Mapping for Format 2 (based on color class -> trait name)
+            // Mapping for Format 2 color class -> trait name
             const colorToTraitMap = {
                 'color--blue': 'energy',
                 'color--yellow': 'mind',
                 'color--green': 'nature',
                 'color--purple': 'tactics',
-                'color--red': 'identity'
+                'color--red': 'identity',
+                // Add text--blue etc. just in case the class name differs slightly
+                'text--blue': 'energy',
+                'text--yellow': 'mind',
+                'text--green': 'nature',
+                'text--purple': 'tactics',
+                'text--red': 'identity'
             };
  
             traitBoxes.forEach((box, index) => {
-                // Try Format 1 structure first
-                const textElementF1 = box.querySelector('.traitbox__text');
-                if (textElementF1) {
-                    // --- Format 1 Parsing Logic (Original) ---
-                    const textContent = textElementF1.textContent.trim();
-                    const labelMatch = textContent.match(/^(\w+):/); // e.g., "Energy:"
-                    const percentMatch = textContent.match(/(\d+)%/); // e.g., "51%"
-                    const typeMatch = textContent.match(/\d+%\s*([\w\s]+)/); // e.g., " Introverted" -> "Introverted"
+                 let traitName = null;
+                 let percent = null;
+                 let type = null;
+                 let formatUsed = null;
  
-                    if (labelMatch && percentMatch && typeMatch) {
-                        const traitName = labelMatch[1].toLowerCase(); // e.g., 'energy'
-                        const percent = parseInt(percentMatch[1], 10);
-                        let type = typeMatch[1].trim(); // e.g., 'Introverted'
+                 // --- Try Format 1 Structure ---
+                 const textElementF1 = box.querySelector('.traitbox__text');
+                 const labelElementF1 = textElementF1?.querySelector('.traitbox__label');
+                 const valueElementF1 = textElementF1?.querySelector('.traitbox__value');
+                 const percentSpanF1 = valueElementF1?.querySelector('span[class*="text--"]'); // Span with %
  
-                        if (resultData.traits.hasOwnProperty(traitName)) {
-                            resultData.traits[traitName].percent = percent;
-                            resultData.traits[traitName].type = type;
-                            // GM_log(`Extracted Trait (F1): ${traitName}, Percent: ${percent}, Type: ${type}`);
-                        } else {
-                            GM_log(`Warning (F1): Found unknown trait label '${labelMatch[1]}' in trait box.`);
-                        }
-                    } else {
-                        GM_log("Warning (F1): Could not parse trait data from text:", textContent);
-                    }
-                    // --- End Format 1 Parsing Logic ---
-                } else {
-                    // --- Format 2 Parsing Logic ---
-                    // Find the element containing percentage and type (might differ slightly, adjust selector if needed)
-                    const valueElementF2 = box.querySelector('.sp-barlabel .font-body strong, .desc__value strong'); // Look for the strong tag with the percentage
-                    const traitBarElement = box.querySelector('.sp-traitbar'); // To find labels if needed, or the strong tag's parent for text
+                 if (textElementF1 && labelElementF1 && valueElementF1 && percentSpanF1) {
+                     formatUsed = 1;
+                     // Extract Trait Name
+                     const labelMatch = labelElementF1.textContent.match(/^(\w+):/);
+                     if (labelMatch) {
+                         traitName = labelMatch[1].toLowerCase();
+                     }
  
-                    if (valueElementF2 && traitBarElement) {
-                        const percentText = valueElementF2.textContent.trim(); // e.g., "51%"
-                        const percent = parseInt(percentText.replace('%', ''), 10);
+                     // Extract Percent
+                     const percentText = percentSpanF1.textContent.trim();
+                     percent = parseInt(percentText.replace('%', ''), 10);
  
-                        // Find the type (text node sibling to the strong tag within its parent)
-                        let type = '';
-                        const parentElement = valueElementF2.parentNode; // e.g., the div.font-body
-                        if (parentElement) {
-                             // Iterate through child nodes to find the text node after the <strong>
-                             let foundStrong = false;
-                             for (let node of parentElement.childNodes) {
-                                 if (node === valueElementF2) {
-                                     foundStrong = true;
-                                 } else if (foundStrong && node.nodeType === Node.TEXT_NODE) {
-                                      type = node.textContent.trim();
-                                      break;
-                                 }
+                     // Extract Type (Text node after the percent span within traitbox__value)
+                     let foundPercentSpan = false;
+                     for (let node of valueElementF1.childNodes) {
+                         if (node === percentSpanF1) {
+                             foundPercentSpan = true;
+                         } else if (foundPercentSpan && node.nodeType === Node.TEXT_NODE) {
+                             const potentialType = node.textContent.trim();
+                             // Basic check to ensure it looks like a type word, not something else
+                             if (potentialType && /^[a-zA-Z\s]+$/.test(potentialType)) {
+                                 type = potentialType;
+                                 break;
                              }
-                        }
+                         }
+                     }
+                     // GM_log(`Format 1 Check - Box ${index}: Name=${traitName}, Percent=${percent}, Type=${type}`);
  
+                 } else {
+                     // --- Try Format 2 Structure ---
+                     const percentStrongF2 = box.querySelector('.sp-barlabel strong[class*="color--"]');
+                     if (percentStrongF2) {
+                         formatUsed = 2;
+                         // Extract Percent
+                         const percentText = percentStrongF2.textContent.trim();
+                         percent = parseInt(percentText.replace('%', ''), 10);
  
-                        // Find the trait name using the color class map
-                        let traitName = null;
-                        for (const className of valueElementF2.classList) {
+                         // Extract Trait Name from color class
+                         for (const className of percentStrongF2.classList) {
                             if (colorToTraitMap[className]) {
                                 traitName = colorToTraitMap[className];
                                 break;
                             }
-                        }
+                         }
  
-                        if (traitName && !isNaN(percent) && type && resultData.traits.hasOwnProperty(traitName)) {
-                            resultData.traits[traitName].percent = percent;
-                            resultData.traits[traitName].type = type;
-                             // GM_log(`Extracted Trait (F2): ${traitName}, Percent: ${percent}, Type: ${type}`);
-                        } else {
-                            GM_log(`Warning (F2): Could not parse trait data. TraitName: ${traitName}, Percent: ${percent}, Type: ${type}. Box Index: ${index}`);
-                        }
-                    } else {
-                        GM_log(`Warning (F2): Could not find necessary value/traitBar elements in trait box. Box Index: ${index}`);
-                    }
-                    // --- End Format 2 Parsing Logic ---
-                }
+                         // Extract Type (Text node after the strong tag within its parent)
+                         const parentElement = percentStrongF2.parentNode; // Should be the div.font-body
+                         if (parentElement) {
+                             let foundPercentStrong = false;
+                             for (let node of parentElement.childNodes) {
+                                 if (node === percentStrongF2) {
+                                     foundPercentStrong = true;
+                                 } else if (foundPercentStrong && node.nodeType === Node.TEXT_NODE) {
+                                      const potentialType = node.textContent.trim();
+                                      // Basic check to ensure it looks like a type word
+                                      if (potentialType && /^[a-zA-Z\s]+$/.test(potentialType)) {
+                                          type = potentialType;
+                                          break;
+                                      }
+                                 }
+                             }
+                         }
+                         // GM_log(`Format 2 Check - Box ${index}: Name=${traitName}, Percent=${percent}, Type=${type}`);
+                     }
+                 }
+ 
+                 // --- Assign to resultData if valid ---
+                 if (traitName && percent !== null && !isNaN(percent) && type && resultData.traits.hasOwnProperty(traitName)) {
+                     resultData.traits[traitName].percent = percent;
+                     resultData.traits[traitName].type = type;
+                     // GM_log(`Assigned Trait (F${formatUsed}): ${traitName}, Percent: ${percent}, Type: ${type}`);
+                 } else {
+                     GM_log(`Warning: Could not reliably extract trait data for box index ${index}. Format Attempted: ${formatUsed || 'None'}. Data: Name=${traitName}, Percent=${percent}, Type=${type}`);
+                 }
             });
             GM_log("Finished extracting trait data.", resultData.traits);
             // --- End Revised Trait Percentage Extraction ---
             return resultData;
         }
  
-        // --- Revised Content Check Function ---
-        // Function to check if the results content has loaded (handles both formats)
+        // --- Revised Content Check Function (Same as previous correction) ---
         function isResultsContentLoaded() {
-            // Check for title elements (either format)
             const titleElementF1 = document.querySelector('h1.header__title');
-            const titleElementF2 = document.querySelector('.sp-typeheader .h1-phone, .sp-typeheader .h1-large-lgbp'); // Format 2 title part
-            const codeElementF2 = document.querySelector('.sp-typeheader .code h1'); // Format 2 code part
+            const titleElementF2 = document.querySelector('.sp-typeheader .h1-phone, .sp-typeheader .h1-large-lgbp');
+            const codeElementF2 = document.querySelector('.sp-typeheader .code h1');
             const titleLoaded = !!titleElementF1 || (!!titleElementF2 && !!codeElementF2);
- 
-            // Check for trait boxes (either format's container)
             const traitBoxes = document.querySelectorAll('.sp-card--traits .traitbox, .profile__traits--intl .traitbox');
-            const traitsLoaded = traitBoxes.length >= 5; // Should have 5 trait boxes
- 
-            // Consider the page loaded when both title/code and trait boxes are present
+            const traitsLoaded = traitBoxes.length >= 5;
             return titleLoaded && traitsLoaded;
         }
         // --- End Revised Content Check Function ---
-
-        // Function to handle the results data extraction and sending
+ 
+        // --- handleResultsData Function (Same as previous correction, including validation) ---
         function handleResultsData() {
             GM_log('Results content detected. Extracting and sending results...');
             const resultData = extractResultData();
-
-            // Basic check if extraction was successful before sending
-            // Ensure mbtiCode is checked as it's derived differently in Format 2
+ 
             if (!resultData.mbtiResult || !resultData.mbtiCode || Object.values(resultData.traits).some(t => t.percent === null || t.type === null)) {
                 GM_log("Error: Failed to extract complete result data. Aborting send. Session ID kept for potential retry/debugging.", resultData);
-                // Do not delete session ID here if sending failed, might be useful to keep it
                 return;
             }
-
-            // Prepare the payload for the result type
+ 
             const resultPayload = {
-                type: 'result', // New type for backend
+                type: 'result',
                 userId: userId,
-                sessionId: sessionId, // Use the retrieved session ID
+                sessionId: sessionId,
                 timestamp: new Date().toISOString(),
                 profileUrl: resultData.profileUrl,
-                mbtiResult: resultData.mbtiResult, // Full result like "Defender (ISFJ-A)"
-                mbtiCode: resultData.mbtiCode,     // Just the code "ISFJ-A"
-                traits: resultData.traits         // Object with mind, energy, etc. details
+                mbtiResult: resultData.mbtiResult,
+                mbtiCode: resultData.mbtiCode,
+                traits: resultData.traits
             };
-
-            sendData(resultPayload, false); // Send results using fetch (beacon not necessary here)
  
-            // Clean up the stored session ID *after* attempting to send
-            // Prevents trying to send results multiple times on refresh if send fails
+            sendData(resultPayload, false);
             GM_deleteValue(SESSION_ID_KEY);
             GM_log("Result data send attempted. Cleared session ID from storage.");
         }
-
-        // Variables for polling
+        // --- End handleResultsData Function ---
+ 
+ 
+        // --- Polling Logic (Unchanged) ---
         let checkAttempts = 0;
-        const MAX_ATTEMPTS = 60; // 30 seconds (checking every 500ms)
-        const POLLING_INTERVAL = 500; // Check every 500ms
-
-        // Set up interval to periodically check for results content
+        const MAX_ATTEMPTS = 60;
+        const POLLING_INTERVAL = 500;
         const resultsCheckInterval = setInterval(() => {
             checkAttempts++;
-
             if (isResultsContentLoaded()) {
-                // Content is loaded, clear interval and process data
                 clearInterval(resultsCheckInterval);
                 GM_log(`Results content detected after ${checkAttempts} attempts (${checkAttempts * POLLING_INTERVAL / 1000}s)`);
                 handleResultsData();
             } else if (checkAttempts >= MAX_ATTEMPTS) {
-                // Timeout reached, give up
                 clearInterval(resultsCheckInterval);
                 GM_log(`Timed out waiting for results content after ${MAX_ATTEMPTS * POLLING_INTERVAL / 1000} seconds.`);
             } else if (checkAttempts % 10 === 0) {
-                // Log progress periodically
                 GM_log(`Still waiting for results content... (${checkAttempts * POLLING_INTERVAL / 1000}s elapsed)`);
             }
         }, POLLING_INTERVAL);
-    }
+        // --- End Polling Logic ---
+  } // --- End of handleResultsPage Logic ---
 
     // --- Router: Decide which logic to run based on URL --- // New section
     if (!userId) {
