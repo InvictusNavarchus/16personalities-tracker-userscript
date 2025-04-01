@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         16Personalities Answer Tracker
 // @namespace    http://tampermonkey.net/
-// @version      0.1.0
+// @version      0.1.1
 // @description  Tracks 16Personalities test answers and sends them to a server.
 // @author       Invictus
 // @match        https://www.16personalities.com/free-personality-test*
@@ -9,7 +9,7 @@
 // @grant        GM_setValue
 // @grant        GM_getValue
 // @grant        GM_log
-// @connect      your-vercel-deployment-url.vercel.app  // <-- IMPORTANT: Replace with your Vercel URL
+// @connect      https://16personalities-tracker-backend.vercel.app/api/log-answers  // <-- IMPORTANT: Replace with your Vercel URL
 // @require      https://cdnjs.cloudflare.com/ajax/libs/uuid/8.3.2/uuid.min.js // For generating UUIDs
 // ==/UserScript==
 
@@ -18,7 +18,7 @@
 
     // --- Configuration ---
     // IMPORTANT: Replace this with the actual URL of your Vercel deployment
-    const VERCEL_ENDPOINT = 'https://your-vercel-deployment-url.vercel.app/api/log-answers';
+    const VERCEL_ENDPOINT = 'https://16personalities-tracker-backend.vercel.app/api/log-answers';
     // ---------------------
 
     // --- Helper Functions ---
