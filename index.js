@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         16Personalities Answer Tracker
 // @namespace    http://tampermonkey.net/
-// @version      0.1.2
+// @version      0.2.0
 // @description  Tracks 16Personalities test answers and sends them to a server.
 // @author       Invictus
 // @match        https://www.16personalities.com/free-personality-test*
@@ -112,16 +112,20 @@
              sendData(startPayload);
         }
 
-        const nextButton = document.querySelector('button.sp-action[aria-label="Go to next set of questions"]');
+        // Use a more general selector targeting the button within the action row
+        const actionButton = document.querySelector('div.action-row > button.sp-action');
 
-        if (nextButton) {
-            GM_log('Next button found. Attaching listener.');
-            nextButton.addEventListener('mousedown', (event) => {
-                GM_log('Next button clicked. Extracting data...');
+        if (actionButton) {
+            GM_log('Action button (Next or See Results) found. Attaching listener.');
 
+            actionButton.addEventListener('mousedown', (event) => {
+                // Use mousedown to capture before the page potentially unloads/changes
+                GM_log('Action button clicked. Extracting data...');
+
+                // --- 1. Extract and Send Answers (Always do this on click) ---
                 const questions = document.querySelectorAll('form[data-quiz] fieldset.question');
                 const answersData = [];
-                const timestamp = new Date().toISOString();
+                const timestamp = new Date().toISOString(); // Timestamp for the answers batch
 
                 questions.forEach(fieldset => {
                     const questionNumber = fieldset.dataset.question;
@@ -137,31 +141,53 @@
                             answer_label: checkedInput.getAttribute('aria-label') || 'Label not found'
                         });
                     } else {
-                         GM_log(`Warning: No answer found for question ${questionNumber}`);
-                         answersData.push({
+                        // Log missing answer, but still include the question structure if needed
+                        GM_log(`Warning: No answer found for question ${questionNumber}`);
+                        answersData.push({
                             question_number: parseInt(questionNumber, 10),
                             question_text: questionText,
-                            answer_value: null,
+                            answer_value: null, // Explicitly null
                             answer_label: 'Not Answered'
                         });
                     }
                 });
 
                 if (answersData.length > 0) {
-                    const payload = {
+                    const answersPayload = {
                         type: 'answers',
                         userId: userId,
                         sessionId: sessionId,
-                        timestamp: timestamp,
+                        timestamp: timestamp, // Use the timestamp generated for this batch
                         answers: answersData
                     };
-                    sendData(payload);
+                    GM_log('Sending answers payload...');
+                    sendData(answersPayload); // Send answers first
                 } else {
                     GM_log('No answers found on this page click.');
                 }
+
+                // --- 2. Check if it's the "See results" button and send finish event ---
+                // Check based on aria-label or button text content for robustness
+                const isSeeResultsButton = actionButton.getAttribute('aria-label')?.includes('Submit the test and see results') ||
+                                           actionButton.querySelector('.button__text')?.textContent.trim() === 'See results';
+
+                if (isSeeResultsButton) {
+                    GM_log('Detected "See results" button click. Sending finish event.');
+                    const finishPayload = {
+                        type: 'event',
+                        eventName: 'test_finished',
+                        userId: userId,
+                        sessionId: sessionId,
+                        timestamp: new Date().toISOString(), // Generate a fresh timestamp for the event itself
+                    };
+                    GM_log('Sending finish event payload...');
+                    sendData(finishPayload); // Send the finish event *after* sending the final answers
+                }
             });
         } else {
-            GM_log('Next button not found on this page.');
+            GM_log('Action button (Next/See Results) not found on this page load.');
+            // You might want to add a MutationObserver here if the button loads dynamically
+            // after the initial 'load' event, but for 16p, 'load' is usually sufficient.
         }
     });
 
