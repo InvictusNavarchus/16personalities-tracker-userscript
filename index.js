@@ -1,15 +1,15 @@
 // ==UserScript==
-// @name         16Personalities Answer Tracker
-// @namespace    http://tampermonkey.net/
-// @version      0.2.2
-// @description  Tracks 16Personalities test answers and sends them to a server.
-// @author       Invictus
-// @match        https://www.16personalities.com/free-personality-test*
-// @icon         https://www.google.com/s2/favicons?sz=64&domain=16personalities.com
-// @grant        GM_setValue
-// @grant        GM_getValue
-// @grant        GM_log
-// @connect      https://16personalities-tracker-backend.vercel.app/api/log-answers  // <-- IMPORTANT: Replace with your Vercel URL
+// @name           16Personalities Answer Tracker
+// @namespace      http://tampermonkey.net/
+// @version        0.3.0
+// @description    Tracks 16Personalities test answers and sends them to a server using event delegation.
+// @author         Invictus (with integration assistance)
+// @match          https://www.16personalities.com/free-personality-test*
+// @icon           https://www.google.com/s2/favicons?sz=64&domain=16personalities.com
+// @grant          GM_setValue
+// @grant          GM_getValue
+// @grant          GM_log
+// @connect        https://16personalities-tracker-backend.vercel.app/api/log-answers  // <-- IMPORTANT: Replace with your Vercel URL
 // ==/UserScript==
 
 (function() {
@@ -112,140 +112,147 @@
     }
 
      // Function to check if it's the very first page (all inputs unchecked)
-    function isFirstPageUnanswered() {
-        const firstQuestionExists = !!document.querySelector('fieldset[data-question="0"]');
-        if (!firstQuestionExists) return false;
+     function isFirstPageUnanswered() {
+         const firstQuestionExists = !!document.querySelector('fieldset[data-question="0"]');
+         if (!firstQuestionExists) return false;
 
-        const anyAnswerChecked = !!document.querySelector('form[data-quiz] input[type="radio"]:checked');
-        return !anyAnswerChecked;
-    }
+         const anyAnswerChecked = !!document.querySelector('form[data-quiz] input[type="radio"]:checked');
+         return !anyAnswerChecked;
+     }
 
-    // Add listener after a short delay to ensure the button is loaded
-    window.addEventListener('load', () => {
-        // Check for first arrival
-        if (isFirstPageUnanswered()) {
-            GM_log('Detected first page visit (unanswered). Sending start event.');
-            const startPayload = {
-                type: 'event',
-                eventName: 'test_started',
-                userId: userId,
-                sessionId: sessionId,
-                timestamp: new Date().toISOString(),
-            };
-            sendData(startPayload); // Send start event normally
-        }
+     // --- Attach Listener using Event Delegation ---
+     // Attach the listener to a stable ancestor like document.body.
+     document.body.addEventListener('mousedown', async (event) => {
+         // Target the specific button using its selector within the event handler
+         const actionButtonSelector = 'div.action-row > button.sp-action';
+         // Use event.target.closest() to check if the clicked element *is* the button
+         // or is *inside* the button (e.g., clicking the text span)
+         const actionButton = event.target.closest(actionButtonSelector);
 
-        // Use a more general selector targeting the button within the action row
-        const actionButton = document.querySelector('div.action-row > button.sp-action');
+         // If the click wasn't on our button or inside it, ignore the event
+         if (!actionButton) {
+             return;
+         }
 
-        if (actionButton) {
-            GM_log('Action button (Next or See Results) found. Attaching listener.');
+         // --- If we get here, the correct button was clicked ---
+         // Use mousedown to capture before the page potentially unloads/changes
+         GM_log('Action button clicked (via delegation). Extracting data...');
 
-            // Add async here to allow await inside the handler
-            actionButton.addEventListener('mousedown', async (event) => {
-                // Use mousedown to capture before the page potentially unloads/changes
-                GM_log('Action button clicked. Extracting data...');
+         // --- 1. Extract Answers (Same as before) ---
+         const questions = document.querySelectorAll('form[data-quiz] fieldset.question');
+         const answersData = [];
+         const timestamp = new Date().toISOString(); // Timestamp for the answers batch
 
-                // --- 1. Extract Answers (Same as before) ---
-                const questions = document.querySelectorAll('form[data-quiz] fieldset.question');
-                const answersData = [];
-                const timestamp = new Date().toISOString(); // Timestamp for the answers batch
+         questions.forEach(fieldset => {
+             const questionNumber = fieldset.dataset.question;
+             const questionTextElement = fieldset.querySelector('.statement span.header');
+             const questionText = questionTextElement ? questionTextElement.textContent.trim() : 'Question text not found';
+             const checkedInput = fieldset.querySelector('input[type="radio"]:checked');
 
-                questions.forEach(fieldset => {
-                    const questionNumber = fieldset.dataset.question;
-                    const questionTextElement = fieldset.querySelector('.statement span.header');
-                    const questionText = questionTextElement ? questionTextElement.textContent.trim() : 'Question text not found';
-                    const checkedInput = fieldset.querySelector('input[type="radio"]:checked');
+             if (checkedInput) {
+                 answersData.push({
+                     question_number: parseInt(questionNumber, 10),
+                     question_text: questionText,
+                     answer_value: checkedInput.value,
+                     answer_label: checkedInput.getAttribute('aria-label') || 'Label not found'
+                 });
+             } else {
+                 GM_log(`Warning: No answer found for question ${questionNumber}`);
+                 answersData.push({
+                     question_number: parseInt(questionNumber, 10),
+                     question_text: questionText,
+                     answer_value: null, // Explicitly null
+                     answer_label: 'Not Answered'
+                 });
+             }
+         });
 
-                    if (checkedInput) {
-                        answersData.push({
-                            question_number: parseInt(questionNumber, 10),
-                            question_text: questionText,
-                            answer_value: checkedInput.value,
-                            answer_label: checkedInput.getAttribute('aria-label') || 'Label not found'
-                        });
-                    } else {
-                        GM_log(`Warning: No answer found for question ${questionNumber}`);
-                        answersData.push({
-                            question_number: parseInt(questionNumber, 10),
-                            question_text: questionText,
-                            answer_value: null, // Explicitly null
-                            answer_label: 'Not Answered'
-                        });
-                    }
-                });
+         const answersPayload = answersData.length > 0 ? {
+             type: 'answers',
+             userId: userId,
+             sessionId: sessionId,
+             timestamp: timestamp, // Use the timestamp generated for this batch
+             answers: answersData
+         } : null;
 
-                const answersPayload = answersData.length > 0 ? {
-                    type: 'answers',
-                    userId: userId,
-                    sessionId: sessionId,
-                    timestamp: timestamp, // Use the timestamp generated for this batch
-                    answers: answersData
-                } : null;
+         // --- 2. Check if it's the "See results" button ---
+         // Check based on aria-label or button text content for robustness
+         const isSeeResultsButton = actionButton.getAttribute('aria-label')?.includes('Submit the test and see results') ||
+                                    actionButton.querySelector('.button__text')?.textContent.trim() === 'See results';
 
-                // --- 2. Check if it's the "See results" button ---
-                // Check based on aria-label or button text content for robustness
-                const isSeeResultsButton = actionButton.getAttribute('aria-label')?.includes('Submit the test and see results') ||
-                                           actionButton.querySelector('.button__text')?.textContent.trim() === 'See results';
+         if (isSeeResultsButton) {
+             GM_log('Detected "See results" button click.');
 
-                if (isSeeResultsButton) {
-                    GM_log('Detected "See results" button click.');
+             // --- NEW: Prevent the default navigation immediately ---
+             event.preventDefault();
+             GM_log('Prevented default button action.');
 
-                    // --- NEW: Prevent the default navigation immediately ---
-                    event.preventDefault();
-                    GM_log('Prevented default button action.');
+             // --- NEW: Send final answers using fetch and await it ---
+             if (answersPayload) {
+                 GM_log('Sending final answers payload (using fetch)...');
+                 await sendData(answersPayload, false); // Use fetch, wait for it to attempt sending
+             } else {
+                 GM_log('No final answers found on this page click.');
+             }
 
-                    // --- NEW: Send final answers using fetch and await it ---
-                    if (answersPayload) {
-                        GM_log('Sending final answers payload (using fetch)...');
-                        await sendData(answersPayload, false); // Use fetch, wait for it to attempt sending
-                    } else {
-                        GM_log('No final answers found on this page click.');
-                    }
+             // --- NEW: Send finish event using sendBeacon (fire and forget) ---
+             GM_log('Sending finish event payload (using sendBeacon)...');
+             const finishPayload = {
+                 type: 'event',
+                 eventName: 'test_finished',
+                 userId: userId,
+                 sessionId: sessionId,
+                 timestamp: new Date().toISOString(), // Generate a fresh timestamp for the event itself
+             };
+             sendData(finishPayload, true); // Use sendBeacon, do not await
 
-                    // --- NEW: Send finish event using sendBeacon (fire and forget) ---
-                    GM_log('Sending finish event payload (using sendBeacon)...');
-                    const finishPayload = {
-                        type: 'event',
-                        eventName: 'test_finished',
-                        userId: userId,
-                        sessionId: sessionId,
-                        timestamp: new Date().toISOString(), // Generate a fresh timestamp for the event itself
-                    };
-                    sendData(finishPayload, true); // Use sendBeacon, do not await
+             // --- NEW: Manually trigger the form submission AFTER sending data ---
+             GM_log('Attempting to manually trigger form submission...');
+             const form = actionButton.closest('form');
+             if (form) {
+                 // Use timeout to allow sendBeacon a slightly better chance, though it's technically asynchronous
+                 setTimeout(() => {
+                     form.submit();
+                     GM_log('Form submitted manually.');
+                 }, 100); // Small delay might help but isn't strictly necessary for sendBeacon
+             } else {
+                 GM_log('Error: Could not find parent form to submit manually.');
+                 // If form submission fails, you might need to redirect manually if you know the URL
+                 // window.location.href = '...'; // Fallback if needed
+             }
 
-                    // --- NEW: Manually trigger the form submission AFTER sending data ---
-                    GM_log('Attempting to manually trigger form submission...');
-                    const form = actionButton.closest('form');
-                    if (form) {
-                        // Use timeout to allow sendBeacon a slightly better chance, though it's technically asynchronous
-                        setTimeout(() => {
-                            form.submit();
-                            GM_log('Form submitted manually.');
-                         }, 100); // Small delay might help but isn't strictly necessary for sendBeacon
-                    } else {
-                        GM_log('Error: Could not find parent form to submit manually.');
-                        // If form submission fails, you might need to redirect manually if you know the URL
-                        // window.location.href = '...'; // Fallback if needed
-                    }
+         } else {
+             // --- Original logic for "Next" button ---
+             // Send answers normally using fetch
+             if (answersPayload) {
+                 GM_log('Sending answers payload for "Next" click...');
+                 // Send data, but DO NOT preventDefault. Let Vue handle the transition.
+                 sendData(answersPayload, false); // Send answers first
+             } else {
+                 GM_log('No answers found on this page click.');
+             }
+             // Let the default action proceed for the "Next" button (load next questions)
+             // IMPORTANT: No event.preventDefault() here for the 'Next' button.
+         }
+     }); // End of event delegation listener
 
-                } else {
-                    // --- Original logic for "Next" button ---
-                    // Send answers normally using fetch
-                    if (answersPayload) {
-                        GM_log('Sending answers payload for "Next" click...');
-                        sendData(answersPayload, false); // Send answers first
-                    } else {
-                        GM_log('No answers found on this page click.');
-                    }
-                    // Let the default action proceed for the "Next" button (load next questions)
-                }
-            });
-        } else {
-            GM_log('Action button (Next/See Results) not found on this page load.');
-            // You might want to add a MutationObserver here if the button loads dynamically
-            // after the initial 'load' event, but for 16p, 'load' is usually sufficient.
-        }
-    });
+     // --- Initial Start Event Logic ---
+     // Add listener after a short delay OR on load to check for the first page.
+     window.addEventListener('load', () => {
+         // Check for first arrival
+         if (isFirstPageUnanswered()) {
+             GM_log('Detected first page visit (unanswered). Sending start event.');
+             const startPayload = {
+                 type: 'event',
+                 eventName: 'test_started',
+                 userId: userId,
+                 sessionId: sessionId,
+                 timestamp: new Date().toISOString(),
+             };
+             sendData(startPayload); // Send start event normally
+         }
+         // Log confirmation that the main listener is active
+         GM_log("Event delegation listener attached to document body.");
+     });
 
 })();
