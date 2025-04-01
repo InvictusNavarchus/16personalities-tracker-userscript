@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         16Personalities Answer Tracker
 // @namespace    http://tampermonkey.net/
-// @version      0.1.1
+// @version      0.1.2
 // @description  Tracks 16Personalities test answers and sends them to a server.
 // @author       Invictus
 // @match        https://www.16personalities.com/free-personality-test*
@@ -10,7 +10,6 @@
 // @grant        GM_getValue
 // @grant        GM_log
 // @connect      https://16personalities-tracker-backend.vercel.app/api/log-answers  // <-- IMPORTANT: Replace with your Vercel URL
-// @require      https://cdnjs.cloudflare.com/ajax/libs/uuid/8.3.2/uuid.min.js // For generating UUIDs
 // ==/UserScript==
 
 (function() {
@@ -25,16 +24,43 @@
     function getOrCreateUserId() {
         let userId = GM_getValue('personalityTrackerUserId', null);
         if (!userId) {
-            userId = uuid.v4(); // Generate UUID using the @require library
-            GM_setValue('personalityTrackerUserId', userId);
-            GM_log('Created new User ID:', userId);
+            // Use built-in crypto.randomUUID()
+            if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+                 userId = crypto.randomUUID();
+                 GM_setValue('personalityTrackerUserId', userId);
+                 GM_log('Created new User ID using crypto.randomUUID():', userId);
+            } else {
+                 // Fallback if crypto.randomUUID is somehow not available (very unlikely in modern browsers)
+                 console.error("crypto.randomUUID() is not available. Cannot generate user ID.");
+                 GM_log("Error: crypto.randomUUID() is not available.");
+                 // You might want to implement a simpler Math.random based generator here as a last resort
+                 // but it won't be a true UUID. For now, we'll just log an error.
+                 return null; // Indicate failure
+            }
         }
         return userId;
     }
 
+    function generateSessionId() {
+         if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+              return crypto.randomUUID();
+         } else {
+              console.error("crypto.randomUUID() is not available. Cannot generate session ID.");
+              GM_log("Error: crypto.randomUUID() is not available.");
+              return null; // Indicate failure
+         }
+    }
+
     // --- Main Logic ---
     const userId = getOrCreateUserId();
-    const sessionId = uuid.v4(); // New session ID for each test attempt/page load
+    // Generate a new session ID only if we successfully got a user ID
+    const sessionId = userId ? generateSessionId() : null;
+
+    // Proceed only if we have valid IDs
+    if (!userId || !sessionId) {
+         GM_log("Could not generate required IDs. Tracker will not run.");
+         return; // Stop script execution if IDs couldn't be generated
+    }
 
     GM_log(`Personality Tracker Initialized. User ID: ${userId}, Session ID: ${sessionId}`);
 
@@ -56,22 +82,19 @@
 
             const result = await response.json();
             GM_log('Data sent successfully:', result);
-            // Optionally clear or update local storage backup here
         } catch (error) {
             console.error('Error sending data:', error);
             GM_log('Error sending data:', error.message);
-            // Consider saving failed payloads to localStorage for retry later
-            // GM_setValue('failedPayloads', JSON.stringify([...JSON.parse(GM_getValue('failedPayloads', '[]')), payload]));
         }
     }
 
      // Function to check if it's the very first page (all inputs unchecked)
     function isFirstPageUnanswered() {
         const firstQuestionExists = !!document.querySelector('fieldset[data-question="0"]');
-        if (!firstQuestionExists) return false; // Not the first page structure
+        if (!firstQuestionExists) return false;
 
         const anyAnswerChecked = !!document.querySelector('form[data-quiz] input[type="radio"]:checked');
-        return !anyAnswerChecked; // It's the first page AND unanswered if no radio is checked
+        return !anyAnswerChecked;
     }
 
     // Add listener after a short delay to ensure the button is loaded
@@ -86,15 +109,13 @@
                  sessionId: sessionId,
                  timestamp: new Date().toISOString(),
              };
-             sendData(startPayload); // Send the start event log
+             sendData(startPayload);
         }
-
 
         const nextButton = document.querySelector('button.sp-action[aria-label="Go to next set of questions"]');
 
         if (nextButton) {
             GM_log('Next button found. Attaching listener.');
-            // Use 'mousedown' as it fires before 'click' and navigation might interrupt 'click'
             nextButton.addEventListener('mousedown', (event) => {
                 GM_log('Next button clicked. Extracting data...');
 
@@ -105,9 +126,7 @@
                 questions.forEach(fieldset => {
                     const questionNumber = fieldset.dataset.question;
                     const questionTextElement = fieldset.querySelector('.statement span.header');
-                    // Handle cases where the structure might slightly differ or elements are missing
                     const questionText = questionTextElement ? questionTextElement.textContent.trim() : 'Question text not found';
-
                     const checkedInput = fieldset.querySelector('input[type="radio"]:checked');
 
                     if (checkedInput) {
@@ -118,7 +137,6 @@
                             answer_label: checkedInput.getAttribute('aria-label') || 'Label not found'
                         });
                     } else {
-                         // This case should ideally not happen if the button requires all answers
                          GM_log(`Warning: No answer found for question ${questionNumber}`);
                          answersData.push({
                             question_number: parseInt(questionNumber, 10),
@@ -137,21 +155,10 @@
                         timestamp: timestamp,
                         answers: answersData
                     };
-                    // Send data asynchronously, don't wait for it as page navigates away
                     sendData(payload);
-
-                    // Optional: Save to localStorage as a backup (implement appending logic if needed)
-                    // try {
-                    //     localStorage.setItem(`16p_answers_${sessionId}_${Date.now()}`, JSON.stringify(payload));
-                    // } catch (e) {
-                    //     GM_log('Error saving backup to localStorage:', e);
-                    // }
-
                 } else {
                     GM_log('No answers found on this page click.');
                 }
-
-                // We don't prevent default, let the navigation proceed
             });
         } else {
             GM_log('Next button not found on this page.');
