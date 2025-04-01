@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         16Personalities Answer Tracker
 // @namespace    http://tampermonkey.net/
-// @version      0.2.1
+// @version      0.2.2
 // @description  Tracks 16Personalities test answers and sends them to a server.
 // @author       Invictus
 // @match        https://www.16personalities.com/free-personality-test*
@@ -9,7 +9,6 @@
 // @grant        GM_setValue
 // @grant        GM_getValue
 // @grant        GM_log
-// @grant        GM_xmlhttpRequest // Added grant in case a fallback is needed, standard practice for network requests
 // @connect      https://16personalities-tracker-backend.vercel.app/api/log-answers  // <-- IMPORTANT: Replace with your Vercel URL
 // ==/UserScript==
 
