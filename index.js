@@ -2,16 +2,16 @@
 // @name         16Personalities Answer & Result Tracker
 // @namespace    http://tampermonkey.net/
 // @version      0.4.0
-// @description  Tracks 16Personalities test answers and results, sending them to a server using event delegation. // Updated description slightly
-// @author       Invictus (with integration assistance & result tracking) // Updated author note
+// @description  Tracks 16Personalities test answers and results, sending them to a server using event delegation.
+// @author       Invictus
 // @match        https://www.16personalities.com/free-personality-test*
-// @match        https://www.16personalities.com/profiles/* // <-- ADDED: Match profile/result pages
+// @match        https://www.16personalities.com/profiles/*
 // @icon         https://www.google.com/s2/favicons?sz=64&domain=16personalities.com
 // @grant        GM_setValue
 // @grant        GM_getValue
-// @grant        GM_deleteValue // <-- ADDED: To clean up session ID
+// @grant        GM_deleteValue
 // @grant        GM_log
-// @connect      https://16personalities-tracker-backend.vercel.app/api/log-answers // <-- IMPORTANT: Replace with your Vercel URL
+// @connect      https://16personalities-tracker-backend.vercel.app/api/log-answers
 // ==/UserScript==
 
 (function() {
