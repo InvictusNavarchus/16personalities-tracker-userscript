@@ -493,7 +493,21 @@
                 }
             };
             
-            // Extract MBTI Result
+            // Extract MBTI Result and Code
+            this.extractMbtiData(resultData);
+            
+            // Extract trait percentages
+            this.extractTraitPercentages(resultData);
+            
+            return resultData;
+        },
+
+        /**
+         * Extract MBTI personality type and code
+         * @param {Object} resultData - Result data object to populate
+         */
+        extractMbtiData(resultData) {
+            // Try Format 1: Single h1 title with code in parentheses
             const titleElementF1 = document.querySelector('h1.header__title');
             if (titleElementF1) {
                 resultData.mbtiResult = titleElementF1.textContent.trim();
@@ -502,23 +516,21 @@
                     resultData.mbtiCode = match[1];
                 }
                 Logger.info("Extracted MBTI Result (Format 1)");
-            } else {
-                const titleElementF2 = document.querySelector('.sp-typeheader .h1-phone, .sp-typeheader .h1-large-lgbp');
-                const codeElementF2 = document.querySelector('.sp-typeheader .code h1');
-                if (titleElementF2 && codeElementF2) {
-                    const titleName = titleElementF2.textContent.trim();
-                    resultData.mbtiCode = codeElementF2.textContent.trim();
-                    resultData.mbtiResult = `${titleName} (${resultData.mbtiCode})`;
-                    Logger.info("Extracted MBTI Result (Format 2)");
-                } else {
-                    Logger.warn("Could not find MBTI result title/code elements using known formats.");
-                }
+                return;
             }
             
-            // Extract trait percentages
-            this.extractTraitPercentages(resultData);
+            // Try Format 2: Separate title and code elements
+            const titleElementF2 = document.querySelector('.sp-typeheader .h1-phone, .sp-typeheader .h1-large-lgbp');
+            const codeElementF2 = document.querySelector('.sp-typeheader .code h1');
+            if (titleElementF2 && codeElementF2) {
+                const titleName = titleElementF2.textContent.trim();
+                resultData.mbtiCode = codeElementF2.textContent.trim();
+                resultData.mbtiResult = `${titleName} (${resultData.mbtiCode})`;
+                Logger.info("Extracted MBTI Result (Format 2)");
+                return;
+            }
             
-            return resultData;
+            Logger.warn("Could not find MBTI result title/code elements using known formats.");
         },
         
         /**
