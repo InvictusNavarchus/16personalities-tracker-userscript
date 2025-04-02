@@ -481,16 +481,16 @@
          */
         extractResultData() {
             const resultData = {
-                mbtiResult: null,
-                mbtiCode: null,
-                profileUrl: window.location.href,
-                traits: {
-                    mind: { percent: null, type: null },
-                    energy: { percent: null, type: null },
-                    nature: { percent: null, type: null },
-                    tactics: { percent: null, type: null },
-                    identity: { percent: null, type: null },
-                }
+            mbtiResult: null, // Example: "Architect (INTJ-A)"
+            mbtiCode: null,   // Example: "INTJ-A"
+            profileUrl: window.location.href, // Example: "https://www.16personalities.com/profiles/12345"
+            traits: {
+                mind: { percent: null, type: null },    // Example: { percent: 75, type: "Introverted" }
+                energy: { percent: null, type: null },  // Example: { percent: 60, type: "Intuitive" }
+                nature: { percent: null, type: null },  // Example: { percent: 55, type: "Thinking" }
+                tactics: { percent: null, type: null }, // Example: { percent: 70, type: "Judging" }
+                identity: { percent: null, type: null } // Example: { percent: 80, type: "Assertive" }
+            }
             };
             
             // Extract MBTI Result and Code
