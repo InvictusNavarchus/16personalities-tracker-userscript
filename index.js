@@ -560,10 +560,10 @@
                 'text--red': 'identity'
             };
             
+            // Extract percentages from trait boxes
             traitBoxes.forEach((box, index) => {
                 let traitName = null;
                 let percent = null;
-                let type = null;
                 let formatUsed = null;
                 
                 // Try Format 1 Structure
@@ -583,20 +583,6 @@
                     // Extract Percent
                     const percentText = percentSpanF1.textContent.trim();
                     percent = parseInt(percentText.replace('%', ''), 10);
-                    
-                    // Extract Type
-                    let foundPercentSpan = false;
-                    for (let node of valueElementF1.childNodes) {
-                        if (node === percentSpanF1) {
-                            foundPercentSpan = true;
-                        } else if (foundPercentSpan && node.nodeType === Node.TEXT_NODE) {
-                            const potentialType = node.textContent.trim();
-                            if (potentialType && /^[a-zA-Z\s]+$/.test(potentialType)) {
-                                type = potentialType;
-                                break;
-                            }
-                        }
-                    }
                 } else {
                     // Try Format 2 Structure
                     const percentStrongF2 = box.querySelector('.sp-barlabel strong[class*="color--"]');
@@ -613,34 +599,69 @@
                                 break;
                             }
                         }
-                        
-                        // Extract Type
-                        const parentElement = percentStrongF2.parentNode;
-                        if (parentElement) {
-                            let foundPercentStrong = false;
-                            for (let node of parentElement.childNodes) {
-                                if (node === percentStrongF2) {
-                                    foundPercentStrong = true;
-                                } else if (foundPercentStrong && node.nodeType === Node.TEXT_NODE) {
-                                    const potentialType = node.textContent.trim();
-                                    if (potentialType && /^[a-zA-Z\s]+$/.test(potentialType)) {
-                                        type = potentialType;
-                                        break;
-                                    }
-                                }
-                            }
-                        }
                     }
                 }
                 
-                // Assign to resultData if valid
-                if (traitName && percent !== null && !isNaN(percent) && type && resultData.traits.hasOwnProperty(traitName)) {
+                // Assign percentage to resultData if valid
+                if (traitName && percent !== null && !isNaN(percent) && resultData.traits.hasOwnProperty(traitName)) {
                     resultData.traits[traitName].percent = percent;
-                    resultData.traits[traitName].type = type;
                 } else {
-                    Logger.warn(`Could not reliably extract trait data for box index ${index}. Format Attempted: ${formatUsed || 'None'}. Data: Name=${traitName}, Percent=${percent}, Type=${type}`);
+                    Logger.warn(`Could not reliably extract trait percentage for box index ${index}. Format Attempted: ${formatUsed || 'None'}. Data: Name=${traitName}, Percent=${percent}`);
                 }
             });
+            
+            // Now set trait types based on MBTI code
+            if (resultData.mbtiCode) {
+                const code = resultData.mbtiCode;
+                
+                // Parse mind trait: I/E
+                if (code.startsWith('I')) {
+                    resultData.traits.mind.type = 'I';
+                } else if (code.startsWith('E')) {
+                    resultData.traits.mind.type = 'E';
+                }
+                
+                // Parse energy trait: N/S (second letter)
+                if (code.length > 1) {
+                    if (code[1] === 'N') {
+                        resultData.traits.energy.type = 'N';
+                    } else if (code[1] === 'S') {
+                        resultData.traits.energy.type = 'S';
+                    }
+                }
+                
+                // Parse nature trait: T/F (third letter)
+                if (code.length > 2) {
+                    if (code[2] === 'T') {
+                        resultData.traits.nature.type = 'T';
+                    } else if (code[2] === 'F') {
+                        resultData.traits.nature.type = 'F';
+                    }
+                }
+                
+                // Parse tactics trait: J/P (fourth letter)
+                if (code.length > 3) {
+                    if (code[3] === 'J') {
+                        resultData.traits.tactics.type = 'J';
+                    } else if (code[3] === 'P') {
+                        resultData.traits.tactics.type = 'P';
+                    }
+                }
+                
+                // Parse identity trait: A/T (after dash)
+                if (code.includes('-')) {
+                    const identity = code.split('-')[1];
+                    if (identity === 'A') {
+                        resultData.traits.identity.type = 'A';
+                    } else if (identity === 'T') {
+                        resultData.traits.identity.type = 'T';
+                    }
+                }
+                
+                Logger.info("Set trait types based on MBTI code: " + code);
+            } else {
+                Logger.warn("Could not set trait types - MBTI code not available");
+            }
             
             Logger.info("Finished extracting trait data.", resultData.traits);
         }
