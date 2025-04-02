@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         16Personalities Answer & Result Tracker
 // @namespace    http://tampermonkey.net/
-// @version      0.4.3
+// @version      0.5.0
 // @description  Tracks 16Personalities test answers and results, sending them to a server using event delegation.
 // @author       Invictus
 // @match        https://www.16personalities.com/free-personality-test*
@@ -12,6 +12,8 @@
 // @grant        GM_deleteValue
 // @grant        GM_log
 // @connect      https://16personalities-tracker-backend.vercel.app/api/log-answers
+// @updateURL    https://raw.githubusercontent.com/InvictusNavarchus/16personalities-tracker-userscript/master/16personalities-result-tracker.user.js
+// @downloadURL  https://raw.githubusercontent.com/InvictusNavarchus/16personalities-tracker-userscript/master/16personalities-result-tracker.user.js
 // ==/UserScript==
 
 (function() {
